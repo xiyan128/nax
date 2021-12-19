@@ -6,17 +6,12 @@ import static life.xiyan.nax.TokenType.*;
 
 public class Parser {
 
-    private static class ParseError extends RuntimeException {}
-
-
     private final List<Token> tokens;
     private int current = 0;
-    // each grammar rule becomes a method inside this new class
-
-
     Parser(List<Token> tokens) {
         this.tokens = tokens;
     }
+    // each grammar rule becomes a method inside this new class
 
     Expr parse() {
         try {
@@ -89,17 +84,15 @@ public class Parser {
     // unary          → ( "!" | "-" ) unary | primary ;
     private Expr unary() {
         if (match(BANG, MINUS)) {
-            if (match(BANG, MINUS)) {
-                Token operator = previous();
-                Expr right = unary();
-                return new Expr.Unary(operator, right);
-            }
+            Token operator = previous();
+            Expr right = unary();
+            return new Expr.Unary(operator, right);
         }
 
         return primary();
     }
 
-//    primary        → NUMBER | STRING | "true" | "false" | "nil"| "(" expression ")" ;
+    //    primary        → NUMBER | STRING | "true" | "false" | "nil"| "(" expression ")" ;
     private Expr primary() {
         if (match(FALSE)) return new Expr.Literal(false);
         if (match(TRUE)) return new Expr.Literal(true);
@@ -155,20 +148,18 @@ public class Parser {
         return tokens.get(current - 1);
     }
 
-    // panic mode recovery
-
     // entering panic mode
     private Token consume(TokenType type, String message) {
         if (check(type)) return advance();
         throw error(peek(), message);
     }
 
+    // panic mode recovery
+
     private ParseError error(Token token, String message) {
         Nax.error(token, message);
         return new ParseError();
     }
-
-    // synchronize the recursive descent parser
 
     // we want ot discard tokens until we're right at the beginning of the next statement
     private void synchronize() {
@@ -190,6 +181,11 @@ public class Parser {
             }
             advance();
         }
+    }
+
+    // synchronize the recursive descent parser
+
+    private static class ParseError extends RuntimeException {
     }
 
 }
