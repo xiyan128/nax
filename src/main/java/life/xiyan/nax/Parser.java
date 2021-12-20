@@ -1,5 +1,6 @@
 package life.xiyan.nax;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static life.xiyan.nax.TokenType.*;
@@ -13,17 +14,89 @@ public class Parser {
     }
     // each grammar rule becomes a method inside this new class
 
-    Expr parse() {
+    List<Stmt> parse() {
+        // a program is a list of statements
+        List<Stmt> statements = new ArrayList<>();
+        while (!isAtEnd()) statements.add(declaration());
+
+        return statements;
+    }
+
+    private Stmt declaration() {
         try {
-            return expression();
+            if (match(VAR)) return varDeclaration();
+            return statement();
         } catch (ParseError error) {
+            synchronize();
             return null;
         }
     }
 
-    // the first rule simply expands to the equality rule
+    private Stmt varDeclaration() {
+        Token name = consume(IDENTIFIER, "Expect variable name.");
+
+        Expr initializer = null;
+        if (match(EQUAL)) initializer = expression();
+
+        consume(SEMICOLON, "Expect ';' after variable declaration");
+        return new Stmt.Var(name, initializer);
+    }
+
+    private Stmt statement() {
+        if (match(PRINT)) return printStatement();
+        if (match(LEFT_BRACE)) return new Stmt.Block(block());
+        return expressionStatement();
+    }
+
+    private List<Stmt> block() {
+        List<Stmt> statements = new ArrayList<>();
+
+        while (!check(RIGHT_BRACE) && !isAtEnd()) {
+            statements.add(declaration());
+        }
+
+        consume(RIGHT_BRACE, "Expect '}' after block");
+        return statements;
+    }
+
+    private Stmt printStatement() {
+        Expr value = expression();
+        consume(SEMICOLON, "Expect ';' after value.");
+        return new Stmt.Print(value);
+    }
+
+    private Stmt expressionStatement() {
+        Expr expr = expression();
+        consume(SEMICOLON, "Expect ';' after expression");
+        return new Stmt.Expression(expr);
+    }
+
     private Expr expression() {
-        return equality();
+        return assignment();
+    }
+
+    private Expr assignment() {
+        // right before we create the assignment expression node, we look at the left-hand side
+        // expression and figure out what kind of assigment target it is; we convert the r-value
+        // expression node into an l-value representation.
+        Expr expr = equality();
+
+        if (match(EQUAL)) {
+            Token equals = previous();
+            Expr value = assignment();
+
+            // check if the left-hand side is a valid assignment target
+            if (expr instanceof Expr.Variable) {
+                Token name = (((Expr.Variable) expr).name);
+                return new Expr.Assign(name, value);
+            }
+
+            // we don't throw because the parser isn't in a confused state where we need to go into
+            // panic mode and synchronize
+            //noinspection ThrowableNotThrown
+            error(equals, "Invalid assignment target");
+        }
+        return expr;
     }
 
     // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
@@ -36,7 +109,7 @@ public class Parser {
             Token operator = previous();
             // call comparison() again to parse the right-hand operand
             Expr right = comparison();
-            // combine the operatr and its two operands into a new Expr.Binary syntax tree node
+            // combine the operator and its two operands into a new Expr.Binary syntax tree node
             expr = new Expr.Binary(expr, operator, right);
         }
 
@@ -98,6 +171,7 @@ public class Parser {
         if (match(TRUE)) return new Expr.Literal(true);
         if (match(NIL)) return new Expr.Literal(true);
         if (match(NUMBER, STRING)) return new Expr.Literal(previous().literal);
+        if (match(IDENTIFIER)) return new Expr.Variable(previous());
         if (match(LEFT_PAREN)) {
             Expr expr = expression();
             // after we match an opening ( and parse the expression inside it, we must find a )
